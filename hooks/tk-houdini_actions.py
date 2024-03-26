@@ -105,6 +105,17 @@ class HoudiniActions(HookBaseClass):
                     "description": "Load an image or image sequence via File COP.",
                 }
             )
+
+        if "materialx_image" in actions:
+            action_instances.append(
+                {
+                    "name": "materialx_image",
+                    "params": None,
+                    "caption": "Import as MaterialX image",
+                    "description": "Load image in a MaterialX node and add it to stage context.",
+                }
+            )
+
         if "usd_reference" in actions:
             action_instances.append(
                 {
@@ -182,6 +193,9 @@ class HoudiniActions(HookBaseClass):
 
         if name == "file_sop":
             self._file_sop(path, sg_publish_data)
+
+        if name == "materialx_image":
+            self._materialx_image(path, sg_publish_data)
 
         if name == "usd_reference":
             self._usd_reference(path, sg_publish_data)
@@ -338,7 +352,7 @@ class HoudiniActions(HookBaseClass):
         task = sg_publish_data.get("task").get("name")
 
         name = asset_name + "_" + task
-        name = name.replace(' ', '_')
+        name = name.replace(" ", "_")
 
         path = self.get_publish_path(sg_publish_data)
 
@@ -363,6 +377,61 @@ class HoudiniActions(HookBaseClass):
 
         _show_node(reference_node)
 
+    def _materialx_image(self, path, sg_publish_data):
+        # Import a texture file into a materialx image node
+
+        import hou
+
+        asset_name = sg_publish_data.get("entity").get("name")
+        task = sg_publish_data.get("task").get("name")
+
+        name = asset_name + "_" + task
+        name = name.replace(" ", "_")
+
+        path = self.get_publish_path(sg_publish_data)
+
+        self.logger.info(name)
+
+        # houdini doesn't like UNC paths.
+        path = path.replace("\\", "/")
+
+        material_library_nodes = hou.nodeType(
+            hou.lopNodeTypeCategory(), "materiallibrary"
+        ).instances()
+
+        all_material_nodes = []
+        for material_library in material_library_nodes:
+            for node in material_library.allSubChildren():
+                if node.type().name() == "subnet":
+                    all_material_nodes.append(node)
+
+        if not all_material_nodes:
+            hou.ui.displayMessage(
+                "You don't have any material subnets in your scene. Please make one to add the image node to.",
+                severity=hou.severityType.Error,
+            )
+            return
+
+        material_node_names = [
+            material_node.name() for material_node in all_material_nodes
+        ]
+        material_node_choice = hou.ui.selectFromList(
+            material_node_names,
+            exclusive=True,
+            title="Select material node to add image node to.",
+        )
+        if material_node_choice:
+            material_node = all_material_nodes[material_node_choice[0]]
+            image_node = material_node.createNode(
+                "mtlximage", sg_publish_data.get("code").split(" ")[0]
+            )
+            image_node.parm("file").set(path)
+
+        try:
+            _show_node(image_node)
+        except UnboundLocalError:
+            pass
+
     def _usd_sublayer(self, path, sg_publish_data):
         # Import a USD file into a sublayer node in the stage context
 
@@ -372,7 +441,7 @@ class HoudiniActions(HookBaseClass):
         task = sg_publish_data.get("task").get("name")
 
         name = asset_name + "_" + task
-        name = name.replace(' ', '_')
+        name = name.replace(" ", "_")
 
         path = self.get_publish_path(sg_publish_data)
 
