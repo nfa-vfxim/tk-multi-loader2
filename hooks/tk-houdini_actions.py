@@ -116,6 +116,26 @@ class HoudiniActions(HookBaseClass):
                 }
             )
 
+        if "materialx_folder" in actions:
+            action_instances.append(
+                {
+                    "name": "materialx_folder",
+                    "params": None,
+                    "caption": "Import as MaterialX images",
+                    "description": "Load texture folder as MaterialX image nodes and add it to stage context.",
+                }
+            )
+
+        if "component_builder" in actions:
+            action_instances.append(
+                {
+                    "name": "component_builder",
+                    "params": None,
+                    "caption": "Create component builder",
+                    "description": "Creates a configured component builder for shading work.",
+                }
+            )
+
         if "usd_reference" in actions:
             action_instances.append(
                 {
@@ -196,6 +216,12 @@ class HoudiniActions(HookBaseClass):
 
         if name == "materialx_image":
             self._materialx_image(path, sg_publish_data)
+
+        if name == "materialx_folder":
+            self._materialx_folder(path, sg_publish_data)
+
+        if name == "component_builder":
+            self._component_builder(path, sg_publish_data)
 
         if name == "usd_reference":
             self._usd_reference(path, sg_publish_data)
@@ -379,7 +405,122 @@ class HoudiniActions(HookBaseClass):
 
     def _materialx_image(self, path, sg_publish_data):
         # Import a texture file into a materialx image node
+        asset_name = sg_publish_data.get("entity").get("name")
+        task = sg_publish_data.get("task").get("name")
 
+        name = asset_name + "_" + task
+        name = name.replace(" ", "_")
+
+        path = self.get_publish_path(sg_publish_data)
+
+        self.logger.info(name)
+
+        # houdini doesn't like UNC paths.
+        path = path.replace("\\", "/")
+
+        material_node = _material_selection_menu()
+        if not material_node:
+            return
+
+        image_node = material_node.createNode(
+            "mtlximage", sg_publish_data.get("code").split(" ")[0]
+        )
+        image_node.parm("file").set(path)
+
+        _show_node(image_node)
+
+    def _materialx_folder(self, path, sg_publish_data):
+        # Imports texture folder as materialx image nodes
+        import hou
+
+        file_paths_to_load = []
+        for file in os.listdir(path):
+            if file.count(".") == 2:
+                new_filename = f"{file.split('.')[0]}.<UDIM>.{file.split('.')[2]}"
+
+            if os.path.join(path, new_filename) not in file_paths_to_load:
+                file_paths_to_load.append(os.path.join(path, new_filename))
+
+        material_node = _material_selection_menu()
+        if not material_node:
+            return
+
+        new_image_nodes = []
+        for file_path in file_paths_to_load:
+            new_node_name = os.path.basename(file_path).split(" - ")[0]
+            image_node = material_node.createNode("mtlximage", new_node_name)
+            image_node.parm("file").set(file_path.replace("\\", "/"))
+            new_image_nodes.append(image_node)
+
+        material_node.layoutChildren()
+        _show_node(image_node)
+
+        automatic_texture_add_choice = hou.ui.displayMessage(
+            "Would you like to automatically add the textures to their correct input?",
+            ("Yes", "No"),
+        )
+
+        # Goes by index of buttons, so 1 would actually match "no"
+        if automatic_texture_add_choice:
+            return
+
+        mtlxstandard_surface_node = material_node.node("mtlxstandard_surface")
+        if not mtlxstandard_surface_node:
+            hou.ui.displayMessage(
+                "Could not find a MaterialX Standard Surface node to automatically add the textures to.",
+                severity=hou.severityType.Error,
+            )
+            return
+
+        for image_node in new_image_nodes:
+            if "Alpha" in image_node.name():
+                mtlxstandard_surface_node.setNamedInput("opacity", image_node, "out")
+
+            if "BaseColor" in image_node.name():
+                mtlxstandard_surface_node.setNamedInput("base_color", image_node, "out")
+
+            if "Displacement" in image_node.name():
+                image_node.parm("signature").set("default")
+                if material_node.node("mtlxdisplacement"):
+                    mtlxrange_node = material_node.createNode("mtlxrange")
+                    mtlxrange_node.setNamedInput("in", image_node, "out")
+                    mtlxrange_node.parm("outlow").set(-0.5)
+                    mtlxrange_node.parm("outhigh").set(0.5)
+                    material_node.node("mtlxdisplacement").setNamedInput(
+                        "displacement", mtlxrange_node, "out"
+                    )
+                else:
+                    hou.ui.displayMessage(
+                        "Could not find a MaterialX Displacement node to add displacement to. Skipping.",
+                        severity=hou.severityType.Error,
+                    )
+
+            if "Emission" in image_node.name():
+                image_node.parm("signature").set("default")
+                mtlxstandard_surface_node.setNamedInput("emission", image_node, "out")
+
+            if "Metallic" in image_node.name():
+                image_node.parm("signature").set("default")
+                mtlxstandard_surface_node.setNamedInput("metalness", image_node, "out")
+
+            if "Normal" in image_node.name():
+                image_node.parm("signature").set("vector3")
+                mtlxnormalmap_node = material_node.createNode("mtlxnormalmap")
+                mtlxnormalmap_node.setNamedInput("in", image_node, "out")
+                mtlxstandard_surface_node.setNamedInput(
+                    "normal", mtlxnormalmap_node, "out"
+                )
+
+            if "Roughness" in image_node.name():
+                image_node.parm("signature").set("default")
+                mtlxstandard_surface_node.setNamedInput(
+                    "diffuse_roughness", image_node, "out"
+                )
+
+        material_node.layoutChildren()
+
+    def _component_builder(self, path, sg_publish_data):
+        # Creates a configured component builder for an alembic file
         import hou
 
         asset_name = sg_publish_data.get("entity").get("name")
@@ -395,40 +536,62 @@ class HoudiniActions(HookBaseClass):
         # houdini doesn't like UNC paths.
         path = path.replace("\\", "/")
 
-        material_library_nodes = hou.nodeType(
-            hou.lopNodeTypeCategory(), "materiallibrary"
-        ).instances()
+        stage = hou.node("/stage")
 
-        all_material_nodes = []
-        for material_library in material_library_nodes:
-            for node in material_library.allSubChildren():
-                if node.type().name() == "subnet":
-                    all_material_nodes.append(node)
-
-        if not all_material_nodes:
-            hou.ui.displayMessage(
-                "You don't have any material subnets in your scene. Please make one to add the image node to.",
-                severity=hou.severityType.Error,
-            )
-            return
-
-        material_node_names = [
-            material_node.name() for material_node in all_material_nodes
-        ]
-        material_node_choice = hou.ui.selectFromList(
-            material_node_names,
-            exclusive=True,
-            title="Select material node to add image node to.",
+        component_geometry_node = stage.createNode(
+            "componentgeometry", f'{sg_publish_data.get("name")}_geometry'
         )
-        if material_node_choice:
-            material_node = all_material_nodes[material_node_choice[0]]
-            image_node = material_node.createNode(
-                "mtlximage", sg_publish_data.get("code").split(" ")[0]
+        material_library = stage.createNode("materiallibrary")
+
+        component_material_node = stage.createNode(
+            "componentmaterial", f'{sg_publish_data.get("name")}_material'
+        )
+        component_output_node = stage.createNode(
+            "componentoutput", f'{sg_publish_data.get("name")}'
+        )
+        sgtk_usd_rop_node = stage.createNode("sgtk_usd_rop")
+
+        component_material_node.setInput(0, component_geometry_node)
+        component_material_node.setInput(1, material_library)
+        component_output_node.setInput(0, component_material_node)
+        sgtk_usd_rop_node.setInput(0, component_output_node)
+
+        stage.layoutChildren(
+            (
+                component_geometry_node,
+                material_library,
+                component_material_node,
+                component_output_node,
+                sgtk_usd_rop_node,
             )
-            image_node.parm("file").set(path)
+        )
+
+        file_node = (
+            component_geometry_node.node("sopnet").node("geo").createNode("file")
+        )
+        file_node.parm("file").set(path)
+        component_geometry_node.node("sopnet").node("geo").node("default").setInput(
+            0, file_node
+        )
+        component_output_node.parm("localize").set(False)
+
+        sticky_note = stage.createStickyNote()
+        sticky_note.setText(
+            """1. Create your materials in the materiallibrary node.
+
+2. Import the textures using the ShotGrid loader.
+
+3. Assign the materials to your model (this tutorial might help: https://youtu.be/vg754CDMElI).
+            
+4. Once your shading work is done, click 'save to disk' on the sgtk_usd_rop. 
+
+5. Publish the USD file with the ShotGrid publisher."""
+        )
+        sticky_note.move((5, 0))
+        sticky_note.setSize((5, 4))
 
         try:
-            _show_node(image_node)
+            _show_node(sgtk_usd_rop_node)
         except UnboundLocalError:
             pass
 
@@ -601,3 +764,43 @@ def _show_node(node):
     node.setSelected(True, clear_all_selected=True)
     network_tab.cd(node.parent().path())
     network_tab.frameSelection()
+
+
+def _material_selection_menu():
+    """Shows a menu in which the user can pick a material subnet from all material
+    libraries to add their textures to.
+
+    Returns:
+        Material node
+    """
+    import hou
+
+    material_library_nodes = hou.nodeType(
+        hou.lopNodeTypeCategory(), "materiallibrary"
+    ).instances()
+
+    all_material_nodes = []
+    for material_library in material_library_nodes:
+        for node in material_library.allSubChildren():
+            if node.type().name() == "subnet":
+                all_material_nodes.append(node)
+
+    if not all_material_nodes:
+        hou.ui.displayMessage(
+            "You don't have any material subnets in your scene. Please make one to add the image node to.",
+            severity=hou.severityType.Error,
+        )
+        return
+
+    material_node_names = [material_node.name() for material_node in all_material_nodes]
+
+    material_node_choice = hou.ui.selectFromList(
+        material_node_names,
+        exclusive=True,
+        title="Select material node to add image node to.",
+    )
+
+    if not material_node_choice:
+        return None
+
+    return all_material_nodes[material_node_choice[0]]
