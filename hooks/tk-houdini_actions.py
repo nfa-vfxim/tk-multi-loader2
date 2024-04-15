@@ -95,7 +95,15 @@ class HoudiniActions(HookBaseClass):
                     "description": "Import the Alembic cache file into a geometry network.",
                 }
             )
-
+        if "stage_import" in actions:
+            action_instances.append(
+                {
+                    "name": "stage_import",
+                    "params": None,
+                    "caption": "Stage import",
+                    "description": "Import the Alembic cache file into the stage.",
+                }
+            )
         if "file_cop" in actions:
             action_instances.append(
                 {
@@ -232,6 +240,9 @@ class HoudiniActions(HookBaseClass):
         if name == "import":
             self._import(path, sg_publish_data)
 
+        if name == "stage_import":
+            self._stage_import(path, sg_publish_data)
+
         if name == "file_cop":
             self._file_cop(path, sg_publish_data)
 
@@ -308,6 +319,38 @@ class HoudiniActions(HookBaseClass):
         _show_node(alembic_sop)
 
     ##############################################################################################################
+
+    def _stage_import(self, path, sg_publish_data):
+        """Import the supplied path as a geo/alembic sop.
+
+        :param str path: The path to the file to import.
+        :param dict sg_publish_data: The publish data for the supplied path.
+
+        """
+
+        import hou
+
+        name = sg_publish_data.get("name", "alembic")
+        path = self.get_publish_path(sg_publish_data)
+
+        # houdini doesn't like UNC paths.
+        path = path.replace("\\", "/")
+
+        stage = hou.node("/stage")
+
+        sop_create_node = stage.createNode("sopcreate", name)
+        sop_create_node.allowEditingOfContents()
+
+        alembic_node = (
+            sop_create_node.node("sopnet").node("create").createNode("alembic", name)
+        )
+        alembic_node.parm("fileName").set(path)
+        alembic_node.parm("reload").pressButton()
+
+        try:
+            _show_node(sop_create_node)
+        except UnboundLocalError:
+            pass
 
     def _file_sop(self, path, sg_publish_data):
         """Import the supplied path as a file sop.
