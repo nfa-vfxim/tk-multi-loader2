@@ -499,7 +499,7 @@ class HoudiniActions(HookBaseClass):
         _show_node(image_node)
 
         automatic_texture_add_choice = hou.ui.displayMessage(
-            "Would you like to automatically add the textures to their correct input?",
+            "Automatically add the textures to correct input? Note: This might not work for all maps.",
             ("Yes", "No"),
         )
 
@@ -519,7 +519,7 @@ class HoudiniActions(HookBaseClass):
             if "Alpha" in image_node.name():
                 mtlxstandard_surface_node.setNamedInput("opacity", image_node, "out")
 
-            if "BaseColor" in image_node.name():
+            if "BaseColor" in image_node.name() or "Base Color" in image_node.name():
                 mtlxstandard_surface_node.setNamedInput("base_color", image_node, "out")
 
             if "Displacement" in image_node.name():
