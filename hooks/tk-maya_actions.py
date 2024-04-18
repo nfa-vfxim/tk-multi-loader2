@@ -219,13 +219,20 @@ class MayaActions(HookBaseClass):
         namespace = namespace.replace(" ", "_")
 
         # Now create the reference object in Maya.
-        cmds.file(
-            path,
-            reference=True,
-            loadReferenceDepth="all",
-            mergeNamespacesOnClash=False,
-            namespace=namespace,
-        )
+        if os.path.splitext(path)[1] == ".usd" or os.path.splitext(path)[1] == ".usda":
+            new_path = path.replace("\\", "/")
+            mel.eval(
+                f'file -r -type "USD Import"  -ignoreVersion -gl -mergeNamespacesOnClash false -namespace "{namespace}" -options ";shadingMode=[[useRegistry,MaterialX],[useRegistry,UsdPreviewSurface],[displayColor,none],[none,none]];preferredMaterial=none;primPath=/;readAnimData=1;useCustomFrameRange=0;startTime=0;endTime=0;importUSDZTextures=0" "{new_path}"'
+            )
+
+        else:
+            cmds.file(
+                path,
+                reference=True,
+                loadReferenceDepth="all",
+                mergeNamespacesOnClash=False,
+                namespace=namespace,
+            )
 
     def _do_import(self, path, sg_publish_data):
         """
