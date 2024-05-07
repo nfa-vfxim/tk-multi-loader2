@@ -82,6 +82,16 @@ class NukeActions(HookBaseClass):
                 }
             )
 
+        if "deep_read_node" in actions:
+            action_instances.append(
+                {
+                    "name": "deep_read_node",
+                    "params": None,
+                    "caption": "Create Deep Read Node",
+                    "description": "This will add a deep read node to the current scene.",
+                }
+            )
+
         if "script_import" in actions:
             action_instances.append(
                 {
@@ -187,6 +197,9 @@ class NukeActions(HookBaseClass):
 
         if name == "read_node":
             self._create_read_node(path, sg_publish_data)
+
+        if name == "deep_read_node":
+            self._create_deep_read_node(path, sg_publish_data)
 
         if name == "script_import":
             self._import_script(path, sg_publish_data)
@@ -322,6 +335,33 @@ class NukeActions(HookBaseClass):
             read_node["first"].setValue(seq_range[0])
             read_node["last"].setValue(seq_range[1])
 
+    def _create_deep_read_node(self, path, sg_publish_data):
+        """
+        Create a deep read node representing the publish.
+
+        :param path: Path to file.
+        :param sg_publish_data: Shotgun data dictionary with all the standard publish fields.
+        """
+        import nuke
+
+        (_, ext) = os.path.splitext(path)
+
+        valid_extensions = [
+            ".exr",
+        ]
+
+        if ext.lower() not in valid_extensions:
+            raise Exception("Unsupported file extension for '%s'!" % path)
+
+        read_node = nuke.createNode("DeepRead")
+        read_node["file"].fromUserText(path)
+
+        seq_range = self._find_sequence_range(path)
+
+        if seq_range:
+            read_node["first"].setValue(seq_range[0])
+            read_node["last"].setValue(seq_range[1])
+
     def _create_geo_node(self, path, sg_publish_data):
         import nuke
 
@@ -347,7 +387,7 @@ class NukeActions(HookBaseClass):
             try:
                 camera_node = nuke.createNode("Camera3")
             except Exception as e:
-                if not ext.lower() == '.usd':
+                if not ext.lower() == ".usd":
                     camera_node = nuke.createNode("Camera2")
                 else:
                     raise Exception("USD is not supported on this Nuke version.")
