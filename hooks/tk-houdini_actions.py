@@ -478,6 +478,9 @@ class HoudiniActions(HookBaseClass):
 
         file_paths_to_load = []
         for file in os.listdir(path):
+            if os.path.splitext(file)[1] != ".exr":
+                continue
+
             if file.count(".") == 2:
                 new_filename = f"{file.split('.')[0]}.<UDIM>.{file.split('.')[2]}"
 
@@ -490,7 +493,14 @@ class HoudiniActions(HookBaseClass):
 
         new_image_nodes = []
         for file_path in file_paths_to_load:
-            new_node_name = os.path.basename(file_path).split(" - ")[0]
+            # Hotfix for odd filenames we sometimes get
+            new_node_name = (
+                os.path.basename(file_path)
+                .split(".")[0]
+                .replace(" ", "")
+                .replace("-", "")
+            )
+
             image_node = material_node.createNode("mtlximage", new_node_name)
             image_node.parm("file").set(file_path.replace("\\", "/"))
             new_image_nodes.append(image_node)
@@ -519,10 +529,10 @@ class HoudiniActions(HookBaseClass):
             if "Alpha" in image_node.name():
                 mtlxstandard_surface_node.setNamedInput("opacity", image_node, "out")
 
-            if "BaseColor" in image_node.name() or "Base Color" in image_node.name():
+            elif "BaseColor" in image_node.name() or "Base Color" in image_node.name():
                 mtlxstandard_surface_node.setNamedInput("base_color", image_node, "out")
 
-            if "Displacement" in image_node.name():
+            elif "Displacement" in image_node.name():
                 image_node.parm("signature").set("default")
                 if material_node.node("mtlxdisplacement"):
                     mtlxrange_node = material_node.createNode("mtlxrange")
@@ -538,15 +548,15 @@ class HoudiniActions(HookBaseClass):
                         severity=hou.severityType.Error,
                     )
 
-            if "Emission" in image_node.name():
+            elif "Emission" in image_node.name():
                 image_node.parm("signature").set("default")
                 mtlxstandard_surface_node.setNamedInput("emission", image_node, "out")
 
-            if "Metallic" in image_node.name():
+            elif "Metallic" in image_node.name():
                 image_node.parm("signature").set("default")
                 mtlxstandard_surface_node.setNamedInput("metalness", image_node, "out")
 
-            if "Normal" in image_node.name():
+            elif "Normal" in image_node.name():
                 image_node.parm("signature").set("vector3")
                 mtlxnormalmap_node = material_node.createNode("mtlxnormalmap")
                 mtlxnormalmap_node.setNamedInput("in", image_node, "out")
@@ -554,10 +564,20 @@ class HoudiniActions(HookBaseClass):
                     "normal", mtlxnormalmap_node, "out"
                 )
 
-            if "Roughness" in image_node.name():
+            elif "Roughness" in image_node.name():
                 image_node.parm("signature").set("default")
                 mtlxstandard_surface_node.setNamedInput(
                     "diffuse_roughness", image_node, "out"
+                )
+
+            elif "Specular" in image_node.name():
+                image_node.parm("signature").set("default")
+                mtlxstandard_surface_node.setNamedInput("specular", image_node, "out")
+
+            else:
+                hou.ui.displayMessage(
+                    f"Could not automatically match {image_node.name()}. Please configure it yourself.",
+                    severity=hou.severityType.Error,
                 )
 
         material_node.layoutChildren()
@@ -582,15 +602,17 @@ class HoudiniActions(HookBaseClass):
         stage = hou.node("/stage")
 
         component_geometry_node = stage.createNode(
-            "componentgeometry", f'{sg_publish_data.get("name")}_geometry'
+            "componentgeometry",
+            f'{sg_publish_data.get("name").replace("-", "")}_geometry',
         )
         material_library = stage.createNode("materiallibrary")
 
         component_material_node = stage.createNode(
-            "componentmaterial", f'{sg_publish_data.get("name")}_material'
+            "componentmaterial",
+            f'{sg_publish_data.get("name").replace("-", "")}_material',
         )
         component_output_node = stage.createNode(
-            "componentoutput", f'{sg_publish_data.get("name")}'
+            "componentoutput", f'{sg_publish_data.get("name").replace("-", "")}'
         )
         sgtk_usd_rop_node = stage.createNode("sgtk_usd_rop")
 
