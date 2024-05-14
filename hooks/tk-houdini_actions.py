@@ -437,6 +437,9 @@ class HoudiniActions(HookBaseClass):
         reference_node = stage_context.createNode("reference", name)
 
         # Set parameters
+        reference_node.parm("primpath1").set(
+            sg_publish_data.get("name").replace("-", "_")
+        )
         reference_node.parm("filepath1").set(path)
         reference_node.parm("primpath").set("/scene/$OS")
         reference_node.parm("primkind").set("group")
