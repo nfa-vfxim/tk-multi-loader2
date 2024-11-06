@@ -11,6 +11,7 @@
 """
 Hook that loads defines all the available actions, broken down by publish type.
 """
+
 import os
 import re
 import sgtk
@@ -19,7 +20,6 @@ HookBaseClass = sgtk.get_hook_baseclass()
 
 
 class HoudiniActions(HookBaseClass):
-
     ##############################################################################################################
     # public interface - to be overridden by deriving classes
 
@@ -494,6 +494,13 @@ class HoudiniActions(HookBaseClass):
         if not material_node:
             return
 
+        if len(file_paths_to_load) == 0:
+            hou.ui.displayMessage(
+                "No .EXR files found in the folder. Did you publish .EXR files or something else?",
+                severity=hou.severityType.Error,
+            )
+            return
+
         new_image_nodes = []
         for file_path in file_paths_to_load:
             # Hotfix for odd filenames we sometimes get
@@ -570,7 +577,7 @@ class HoudiniActions(HookBaseClass):
             elif "Roughness" in image_node.name():
                 image_node.parm("signature").set("default")
                 mtlxstandard_surface_node.setNamedInput(
-                    "diffuse_roughness", image_node, "out"
+                    "specular_roughness", image_node, "out"
                 )
 
             elif "Specular" in image_node.name():
