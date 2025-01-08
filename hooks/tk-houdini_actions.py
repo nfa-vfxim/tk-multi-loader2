@@ -486,6 +486,8 @@ class HoudiniActions(HookBaseClass):
 
             if file.count(".") == 2:
                 new_filename = f"{file.split('.')[0]}.<UDIM>.{file.split('.')[2]}"
+            else:
+                new_filename = file
 
             if os.path.join(path, new_filename) not in file_paths_to_load:
                 file_paths_to_load.append(os.path.join(path, new_filename))
